@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest an addition or change
+labels: [enhancement]
+body:
+  - type: dropdown
+    id: library
+    attributes:
+      label: Library
+      options: [zag-http, zag-pg, a new library, other]
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The problem first; a proposed API is welcome but optional.
+    validations:
+      required: true
+  - type: textarea
+    id: api
+    attributes:
+      label: What could the API look like?
+      render: zig

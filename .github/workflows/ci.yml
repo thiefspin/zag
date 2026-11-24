@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A new push to the same branch or PR cancels the run in progress.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  ZIG_VERSION: 0.17.1
+
+jobs:
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+          use-cache: false
+      - run: make fmt-check
+
+  test:
+    name: Test (${{ matrix.os }}, ${{ matrix.optimize }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        optimize: [Debug, ReleaseSafe]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+          cache-key: ${{ matrix.optimize }}
+
+      # Linux runners have Docker, so zag-pg's integration tests run there
+      # against Postgres and must not skip. macOS runners have no Docker; the
+      # database tests skip and everything else runs.
+      - name: Start Postgres
+        if: runner.os == 'Linux'
+        run: |
+          make pg-up
+          echo "ZAG_PG_REQUIRE=1" >> "$GITHUB_ENV"
+
+      - name: Test
+        run: make test OPTIMIZE=${{ matrix.optimize }}
+
+      - name: Postgres logs
+        if: failure() && runner.os == 'Linux'
+        run: docker logs zag-pg-test
+
+  examples:
+    name: Examples
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - name: Build every library and example
+        run: make build
+      - name: Run the client tour (self-contained)
+        run: timeout 60 zag-http/zig-out/bin/client_tour
+      - name: Smoke-test the zag-pg todos service
+        run: |
+          make pg-up
+          zag-pg/zig-out/bin/todos &
+          for _ in $(seq 50); do curl -sf localhost:3003/todos >/dev/null && break; sleep 0.2; done
+          curl -sf -X POST localhost:3003/todos -H 'content-type: application/json' -d '{"title":"ci"}'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:3003/todos \
+            -H 'content-type: application/json' -d '{"title":"ci"}')" = 409
+          curl -sf localhost:3003/todos | grep -q '"title":"ci"'
+          kill %1
+
+  package:
+    name: Package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - name: Versions agree
+        run: .github/scripts/check-versions.sh
+      - name: Fetch and build as a dependency
+        run: .github/scripts/package-check.sh
+
+  docs:
+    name: API docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - run: make docs

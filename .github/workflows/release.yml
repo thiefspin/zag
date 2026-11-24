@@ -1,0 +1,100 @@
+name: Release
+
+# Push a tag to release:
+#   1. Set the version in build.zig.zon and every zag-*/build.zig.zon.
+#   2. Move CHANGELOG.md's "Unreleased" notes under "## [X.Y.Z] - YYYY-MM-DD".
+#   3. Commit, then: git tag vX.Y.Z && git push origin vX.Y.Z
+#
+# This checks the tag against the versions, runs the full test suite, and
+# publishes a GitHub release with the changelog notes, a source tarball, and
+# the `zig fetch` command (with the package hash) to use it.
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ZIG_VERSION: 0.17.1
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - name: Tag matches build.zig.zon versions
+        run: .github/scripts/check-versions.sh "$GITHUB_REF_NAME"
+      - name: Changelog has notes for this version
+        run: .github/scripts/changelog-section.sh "$GITHUB_REF_NAME"
+      - name: Start Postgres
+        run: |
+          make pg-up
+          echo "ZAG_PG_REQUIRE=1" >> "$GITHUB_ENV"
+      - name: Format, test (Debug and ReleaseSafe)
+        run: make check
+      - name: Fetch and build as a dependency
+        run: .github/scripts/package-check.sh
+
+  publish:
+    name: Publish
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+          use-cache: false
+
+      - name: Source tarball and package hash
+        id: package
+        run: |
+          mkdir dist
+          tarball="dist/zag-$GITHUB_REF_NAME.tar.gz"
+          git archive --format=tar.gz --prefix="zag-$GITHUB_REF_NAME/" -o "$tarball" "$GITHUB_REF_NAME"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+          echo "hash=$(zig fetch "$tarball")" >> "$GITHUB_OUTPUT"
+
+      - name: Release notes
+        env:
+          HASH: ${{ steps.package.outputs.hash }}
+        run: |
+          {
+            .github/scripts/changelog-section.sh "$GITHUB_REF_NAME"
+            cat <<EOF
+
+          ## Install
+
+          \`\`\`sh
+          zig fetch --save git+https://github.com/$GITHUB_REPOSITORY#$GITHUB_REF_NAME
+          \`\`\`
+
+          Package hash: \`$HASH\` (Zig $ZIG_VERSION)
+
+          See the [README](https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/README.md) for usage.
+          EOF
+          } > dist/notes.md
+          cat dist/notes.md
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=""
+          [[ "$GITHUB_REF_NAME" == *-* ]] && prerelease="--prerelease"
+          gh release create "$GITHUB_REF_NAME" "${{ steps.package.outputs.tarball }}" \
+            --title "Zag $GITHUB_REF_NAME" --notes-file dist/notes.md --verify-tag $prerelease

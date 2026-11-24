@@ -1,0 +1,51 @@
+# Zig build outputs and caches (at the root and in every zag-* package)
+.zig-cache/
+zig-cache/
+zig-out/
+# Fetched dependencies (Zig 0.17+ keeps them in the project)
+zig-pkg/
+
+# macOS
+.DS_Store
+._*
+.AppleDouble
+.Spotlight-V100
+.Trashes
+
+# Windows / Linux
+Thumbs.db
+desktop.ini
+*~
+.directory
+
+# Editors and IDEs
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.zed/
+.fleet/
+*.swp
+*.swo
+*.sublime-workspace
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Logs, profiles and crash dumps
+*.log
+perf.data*
+*.trace
+*.profraw
+core.[0-9]*
+vgcore.*
+
+# Release artifacts built locally
+/dist/
+*.tar.gz
+
+# Personal Claude Code settings (shared settings.json stays tracked)
+.claude/settings.local.json

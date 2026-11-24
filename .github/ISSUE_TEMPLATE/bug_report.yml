@@ -1,0 +1,31 @@
+name: Bug report
+description: Something doesn't work as documented
+labels: [bug]
+body:
+  - type: dropdown
+    id: library
+    attributes:
+      label: Library
+      options: [zag-http, zag-pg, build / packaging, other]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Smallest code that reproduces it
+      render: zig
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Zag version or commit, `zig version`, OS (and Postgres version for zag-pg)
+    validations:
+      required: true

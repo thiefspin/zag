@@ -1,0 +1,21 @@
+.{
+    // The umbrella package. Users fetch this once and pick modules:
+    //   b.dependency("zag", .{}).module("zag-http")
+    .name = .zag,
+    .version = "0.1.0",
+    .fingerprint = 0x9179a89a2090a7b, // Changing this has security and trust implications.
+    .minimum_zig_version = "0.17.1",
+    // One entry per library. Each folder is also a standalone package.
+    .dependencies = .{
+        .zag_http = .{ .path = "zag-http" },
+        .zag_pg = .{ .path = "zag-pg" },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "README.md",
+        "CHANGELOG.md",
+        "zag-http",
+        "zag-pg",
+    },
+}
